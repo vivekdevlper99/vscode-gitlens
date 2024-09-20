@@ -20,6 +20,7 @@ import type {
 } from '../authentication/integrationAuthentication';
 import type { SupportedIntegrationIds } from '../integration';
 import { HostingIntegration } from '../integration';
+import type { ProviderActionablePullRequest } from './models';
 import { providersMetadata } from './models';
 import type { ProvidersApi } from './providersApi';
 
@@ -316,4 +317,38 @@ export class GitHubEnterpriseIntegration extends GitHubIntegrationBase<SelfHoste
 
 		return super.connect(source);
 	}
+}
+
+const GitHubPullRequestUrlRegex = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/;
+export type GitHubPullRequestURLIdentity = {
+	ownerAndRepo?: string;
+	prNumber?: string;
+};
+
+export function getPullRequestIdentityValuesFromSearch(search: string): GitHubPullRequestURLIdentity {
+	let match = search.match(GitHubPullRequestUrlRegex);
+	let ownerAndRepo: string | undefined = undefined;
+	let prNumber: string | undefined = undefined;
+	if (match != null) {
+		ownerAndRepo = match[1];
+		prNumber = match[2];
+	}
+
+	if (prNumber == null) {
+		match = search.match(/(?:#|\/)(\d+)/);
+		if (match != null) {
+			prNumber = match[1];
+		}
+	}
+
+	return { ownerAndRepo: ownerAndRepo, prNumber: prNumber };
+}
+
+export function doesPullRequestSatisfyGitHubRepositoryURLIdentity(
+	pr: ProviderActionablePullRequest,
+	{ ownerAndRepo, prNumber }: GitHubPullRequestURLIdentity,
+): boolean {
+	const satisfiesPrNumber = prNumber != null && pr.number === parseInt(prNumber, 10);
+	const satisfiesOwnerAndRepo = ownerAndRepo != null && pr.repository.name === ownerAndRepo;
+	return satisfiesPrNumber && satisfiesOwnerAndRepo;
 }
