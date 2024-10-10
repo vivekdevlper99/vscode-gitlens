@@ -48,6 +48,7 @@ import type { DirectiveQuickPickItem } from '../../quickpicks/items/directive';
 import { createDirectiveQuickPickItem, Directive, isDirectiveQuickPickItem } from '../../quickpicks/items/directive';
 import { getScopedCounter } from '../../system/counter';
 import { fromNow } from '../../system/date';
+import { Debouncer } from '../../system/debouncer';
 import { some } from '../../system/iterable';
 import { interpolate, pluralize } from '../../system/string';
 import { executeCommand } from '../../system/vscode/command';
@@ -147,6 +148,8 @@ function assertsLaunchpadStepState(state: StepState<State>): asserts state is La
 const instanceCounter = getScopedCounter();
 
 const defaultCollapsedGroups: LaunchpadGroup[] = ['draft', 'other', 'snoozed'];
+
+const searchDebouncer = new Debouncer(500);
 
 export class LaunchpadCommand extends QuickCommand<State> {
 	private readonly source: Source;
@@ -458,7 +461,7 @@ export class LaunchpadCommand extends QuickCommand<State> {
 			};
 		};
 
-		const getItems = (result: LaunchpadCategorizedResult) => {
+		const getItems = (result: LaunchpadCategorizedResult, treatAllGroupAsExpanded?: boolean) => {
 			const items: (LaunchpadItemQuickPickItem | DirectiveQuickPickItem | ConnectMoreIntegrationsItem)[] = [];
 
 			if (result.items?.length) {
@@ -475,7 +478,7 @@ export class LaunchpadCommand extends QuickCommand<State> {
 
 					items.push(...buildGroupHeading(ui, groupItems.length));
 
-					if (context.collapsed.get(ui)) continue;
+					if (!treatAllGroupAsExpanded && context.collapsed.get(ui)) continue;
 
 					items.push(...groupItems.map(i => buildLaunchpadQuickPickItem(i, ui, topItem)));
 				}
@@ -484,7 +487,7 @@ export class LaunchpadCommand extends QuickCommand<State> {
 			return items;
 		};
 
-		function getItemsAndPlaceholder() {
+		function getItemsAndPlaceholder(treatAllGroupAsExpanded?: boolean) {
 			if (context.result.error != null) {
 				return {
 					placeholder: `Unable to load items (${
@@ -507,7 +510,7 @@ export class LaunchpadCommand extends QuickCommand<State> {
 
 			return {
 				placeholder: 'Choose an item to focus on',
-				items: getItems(context.result),
+				items: getItems(context.result, treatAllGroupAsExpanded),
 			};
 		}
 
@@ -520,7 +523,7 @@ export class LaunchpadCommand extends QuickCommand<State> {
 			try {
 				await updateContextItems(this.container, context, { force: true, search: search });
 
-				const { items, placeholder } = getItemsAndPlaceholder();
+				const { items, placeholder } = getItemsAndPlaceholder(search != null);
 				quickpick.placeholder = placeholder;
 				quickpick.items = items;
 			} finally {
@@ -545,7 +548,7 @@ export class LaunchpadCommand extends QuickCommand<State> {
 				LaunchpadSettingsQuickInputButton,
 				RefreshQuickInputButton,
 			],
-			onDidChangeValue: async quickpick => {
+			onDidChangeValue: quickpick => {
 				const hideGroups = Boolean(quickpick.value?.length);
 
 				if (groupsHidden !== hideGroups) {
@@ -591,13 +594,16 @@ export class LaunchpadCommand extends QuickCommand<State> {
 							}
 							// We have found an item that matches to the URL.
 							// Now it will be displayed as the found item and we exit this function now without sending any requests to API:
+							searchDebouncer.cancel();
 							return true;
 						}
 					}
 					// Nothing is found above, so let's perform search in the API:
-					await updateItems(quickpick, value);
-					quickpick.items = quickpick.items.filter(i => !isDirectiveQuickPickItem(i));
-					groupsHidden = true;
+					void searchDebouncer.debounce(async () => {
+						await updateItems(quickpick, value);
+						quickpick.items = quickpick.items.filter(i => !isDirectiveQuickPickItem(i));
+						groupsHidden = true;
+					});
 				}
 
 				return true;
