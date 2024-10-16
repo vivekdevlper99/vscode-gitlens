@@ -324,7 +324,6 @@ function getWebviewsConfig(mode, env) {
 		getHtmlPlugin('timeline', true, mode, env),
 		getHtmlPlugin('welcome', false, mode, env),
 		getHtmlPlugin('patchDetails', true, mode, env),
-		getCspHtmlPlugin(mode, env),
 		// new InlineChunkHtmlPlugin(HtmlPlugin, mode === 'production' ? ['\\.css$'] : []),
 		new CopyPlugin({
 			patterns: [
@@ -571,46 +570,6 @@ function getWebviewsConfig(mode, env) {
 /**
  * @param { 'production' | 'development' | 'none' } mode
  * @param {{ analyzeBundle?: boolean; analyzeDeps?: boolean; esbuild?: boolean } | undefined } env
- * @returns { CspHtmlPlugin }
- */
-function getCspHtmlPlugin(mode, env) {
-	const cspPlugin = new CspHtmlPlugin(
-		{
-			'default-src': "'none'",
-			'img-src': ['#{cspSource}', 'https:', 'data:'],
-			'script-src':
-				mode !== 'production'
-					? ['#{cspSource}', "'nonce-#{cspNonce}'", "'unsafe-eval'"]
-					: ['#{cspSource}', "'nonce-#{cspNonce}'"],
-			'style-src':
-				mode === 'production'
-					? ['#{cspSource}', "'nonce-#{cspNonce}'", "'unsafe-hashes'"]
-					: ['#{cspSource}', "'unsafe-hashes'", "'unsafe-inline'"],
-			'font-src': ['#{cspSource}'],
-		},
-		{
-			enabled: true,
-			hashingMethod: 'sha256',
-			hashEnabled: {
-				'script-src': true,
-				'style-src': mode === 'production',
-			},
-			nonceEnabled: {
-				'script-src': true,
-				'style-src': mode === 'production',
-			},
-		},
-	);
-	// Override the nonce creation so we can dynamically generate them at runtime
-	// @ts-ignore
-	cspPlugin.createNonce = () => '#{cspNonce}';
-
-	return cspPlugin;
-}
-
-/**
- * @param { 'production' | 'development' | 'none' } mode
- * @param {{ analyzeBundle?: boolean; analyzeDeps?: boolean; esbuild?: boolean } | undefined } env
  * @returns { ImageMinimizerPlugin.Generator<any> }
  */
 function getImageMinimizerConfig(mode, env) {
@@ -638,6 +597,31 @@ function getImageMinimizerConfig(mode, env) {
  */
 function getHtmlPlugin(name, plus, mode, env) {
 	return new HtmlPlugin({
+		cspPlugin: {
+			enabled: true,
+			policy: {
+				'default-src': "'none'",
+				'img-src': ['#{cspSource}', 'https:', 'data:'],
+				'script-src':
+					mode !== 'production'
+						? ['#{cspSource}', "'nonce-#{cspNonce}'", "'unsafe-eval'"]
+						: ['#{cspSource}', "'nonce-#{cspNonce}'"],
+				'style-src':
+					mode === 'production'
+						? ['#{cspSource}', "'nonce-#{cspNonce}'", "'unsafe-hashes'"]
+						: ['#{cspSource}', "'unsafe-hashes'", "'unsafe-inline'"],
+				'font-src': ['#{cspSource}'],
+			},
+			hashingMethod: 'sha256',
+			hashEnabled: {
+				'script-src': true,
+				'style-src': mode === 'production',
+			},
+			nonceEnabled: {
+				'script-src': true,
+				'style-src': mode === 'production',
+			},
+		},
 		template: plus ? path.join('plus', name, `${name}.html`) : path.join(name, `${name}.html`),
 		chunks: [name],
 		filename: path.join(__dirname, 'dist', 'webviews', `${name}.html`),

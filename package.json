@@ -17982,6 +17982,7 @@
 		"@playwright/test": "1.48.0",
 		"@swc/core": "1.7.35",
 		"@twbs/fantasticon": "3.0.0",
+		"@types/csp-html-webpack-plugin": "^3.0.5",
 		"@types/eslint__js": "8.42.3",
 		"@types/mocha": "10.0.8",
 		"@types/node": "18.15.0",
